@@ -1,0 +1,1784 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>排排序    v0.1.2 r01f    by Urey</title>
+    <style>
+        :root {
+            --transition-duration: 0.3s;
+            --blur-intensity: 5px;
+            --overlay-opacity: 0.2;
+        }
+        
+        /* 基础样式重置 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'MiSans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: #333;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+            /* 尝试声明硬件加速 */
+            transform: translateZ(0);
+            will-change: transform;
+        }
+        
+        /* 背景自适应与设定 */
+        #bg-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url('bin/bgpic.jpg');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            filter: blur(var(--blur-intensity));
+            z-index: -1;
+            /* 优化背景渲染  尝试硬件加速 */
+            transform: translateZ(0);
+            backface-visibility: hidden;
+        }
+        
+        /* 屏幕容器 */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity var(--transition-duration) ease-in-out;
+            background-color: rgba(255, 255, 255, var(--overlay-opacity));
+            /* RGB透明通道使用GPU渲染而非HW */
+            transform: translateZ(0);
+            will-change: opacity;
+        }
+        
+        /* 屏幕状态 */
+        #screen1 {
+            opacity: 1;
+        }
+        
+        #loadingScreen,
+        #gameScreen,
+        #resultScreen {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        /* 标题样式 */
+        .title {
+            font-size: 36px;
+            font-weight: bold;
+            margin-bottom: 30px;
+            color: #2c3e50;
+            text-align: center;
+            text-shadow: 0 2px 4px rgba(255, 255, 255, 0.7);
+        }
+        
+        /* file input和圆角框 */
+        .file-select-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            width: 80%;
+            max-width: 500px;
+            background-color: rgba(255, 255, 255, 0.7);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(5px);
+        }
+        
+        .file-input-group {
+            display: flex;
+            width: 100%;
+            gap: 10px;
+        }
+        
+        .file-input-btn {
+            padding: 12px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color var(--transition-duration);
+            flex-shrink: 0;
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .file-input-btn:hover {
+            background-color: #2980b9;
+        }
+        
+        .file-name-display {
+            flex-grow: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: white;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .start-btn {
+            padding: 12px 40px;
+            background-color: #95a5a6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            cursor: not-allowed;
+            transition: background-color var(--transition-duration);
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .start-btn.active {
+            background-color: #2ecc71;
+            cursor: pointer;
+        }
+        
+        .start-btn.active:hover {
+            background-color: #27ae60;
+        }
+        
+        /* 顶部按钮 */
+        .top-buttons {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px;
+        }
+        
+        .top-btn {
+            padding: 8px 16px;
+            background-color: rgba(52, 152, 219, 0.8);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color var(--transition-duration);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .top-btn:hover {
+            background-color: rgba(41, 128, 185, 0.9);
+        }
+        
+        /* 一点玄学优化 */
+        #loadingText {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            font-weight: bold;
+            color: #3498db;
+            transition: all 2.2s ease-in-out;
+            z-index: 10;
+            text-shadow: 0 2px 4px rgba(255, 255, 255, 0.7);
+        }
+        
+        #configName {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 36px;
+            font-weight: bold;
+            color: #2c3e50;
+            opacity: 0;
+            transition: opacity 1.2s ease-in-out;
+            z-index: 5;
+            text-shadow: 0 2px 4px rgba(255, 255, 255, 0.7);
+        }
+        
+        /* 游戏界面状态框 */
+        .status-box {
+            position: absolute;
+            top: 20px;
+            padding: 10px 15px;
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            font-size: 18px;
+            font-weight: bold;
+            z-index: 10;
+        }
+        
+        #accuracyBox {
+            left: 20px;
+        }
+        
+        #statsBox {
+            right: 20px;
+        }
+        
+        /* 游戏内容区域优化 */
+        .game-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 30px;
+            width: 90%;
+            max-width: 600px;
+            margin-top: 80px;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .word-hint {
+            font-size: 24px;
+            text-align: center;
+            padding: 10px 20px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .blanks-area {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            min-height: 60px;
+        }
+        
+        .blank {
+            width: 40px;
+            height: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            font-weight: bold;
+            border-bottom: 3px solid #3498db;
+            cursor: pointer;
+            transition: all 0.2s;
+            /* 优化渲染性能 */
+            transform: translateZ(0);
+        }
+        
+        .blank:hover {
+            background-color: rgba(52, 152, 219, 0.1);
+        }
+        
+        .bubbles-area {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            min-height: 80px;
+        }
+        
+        .bubble {
+            width: 75px;
+            height: 75px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 32px;
+            font-weight: bold;
+            background-color: #3498db;
+            color: white;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.2s, background-color 0.3s;
+            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.15);
+            /* 优化动画性能 */
+            transform: translateZ(0);
+            will-change: transform;
+        }
+        
+        .bubble:hover {
+            transform: scale(1.1);
+        }
+        
+        /* 结束界面样式 */
+        .result-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            text-align: center;
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .result-title {
+            font-size: 48px;
+            font-weight: bold;
+            color: #2ecc71;
+            margin-bottom: 20px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .result-stat {
+            font-size: 28px;
+            color: #2c3e50;
+        }
+        
+        .result-value {
+            font-weight: bold;
+            color: #e74c3c;
+        }
+        
+        /* 重新开始按钮 */
+        .restart-btn {
+            padding: 12px 40px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            cursor: pointer;
+            transition: background-color var(--transition-duration);
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+        }
+        
+        .restart-btn:hover {
+            background-color: #2980b9;
+        }
+        
+        /* 音乐提示 */
+        .music-hint {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            opacity: 0.8;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.8; }
+            50% { opacity: 0.5; }
+            100% { opacity: 0.8; }
+        }
+        
+        /* 弹窗样式优化 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity var(--transition-duration) ease;
+        }
+        
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        
+        .modal-content {
+            background-color: white;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            transform: scale(0.9);
+            transition: transform var(--transition-duration) ease;
+            overflow: hidden;
+        }
+        
+        .modal-overlay.active .modal-content {
+            transform: scale(1);
+        }
+        
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #f8f9fa;
+        }
+        
+        .modal-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #7f8c8d;
+            transition: color var(--transition-duration);
+        }
+        
+        .modal-close:hover {
+            color: #e74c3c;
+        }
+        
+        .modal-body {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        /* 从文档1移植的Markdown内容样式 - 更完整的样式 */
+        .markdown-content {
+            font-family: inherit;
+        }
+        
+        .markdown-content h1,
+        .markdown-content h2,
+        .markdown-content h3,
+        .markdown-content h4,
+        .markdown-content h5,
+        .markdown-content h6 {
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+            color: #2c3e50;
+        }
+        
+        .markdown-content h1 {
+            font-size: 1.8em;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 0.3em;
+        }
+        
+        .markdown-content h2 {
+            font-size: 1.6em;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 0.3em;
+        }
+        
+        .markdown-content h3 {
+            font-size: 1.4em;
+        }
+        
+        .markdown-content p {
+            margin-bottom: 1em;
+        }
+        
+        .markdown-content ul,
+        .markdown-content ol {
+            margin-bottom: 1em;
+            padding-left: 2em;
+        }
+        
+        .markdown-content li {
+            margin-bottom: 0.5em;
+        }
+        
+        .markdown-content code {
+            background-color: #f8f9fa;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        
+        .markdown-content pre {
+            background-color: #f8f9fa;
+            padding: 1em;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin-bottom: 1em;
+        }
+        
+        .markdown-content pre code {
+            background: none;
+            padding: 0;
+        }
+        
+        .markdown-content blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 1em;
+            margin-left: 0;
+            color: #7f8c8d;
+            font-style: italic;
+        }
+        
+        .markdown-content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 1em;
+        }
+        
+        .markdown-content th,
+        .markdown-content td {
+            border: 1px solid #ddd;
+            padding: 0.5em;
+            text-align: left;
+        }
+        
+        .markdown-content th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        
+        .markdown-content a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        
+        .markdown-content a:hover {
+            text-decoration: underline;
+        }
+        
+        .markdown-content img {
+            max-width: 100%;
+            height: auto;
+        }
+        
+        /* 设置选项样式 */
+        .settings-option {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+            transition: background-color 0.2s;
+        }
+        
+        .settings-option:last-child {
+            border-bottom: none;
+        }
+        
+        .settings-option:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .option-label {
+            font-size: 16px;
+            color: #2c3e50;
+            flex-grow: 1;
+        }
+        
+        .option-toggle {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+        
+        .option-toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .toggle-slider {
+            background-color: #3498db;
+        }
+        
+        input:checked + .toggle-slider:before {
+            transform: translateX(26px);
+        }
+        
+        .settings-group {
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .settings-group-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #3498db;
+            margin-bottom: 10px;
+            padding-left: 15px;
+        }
+        
+        .settings-description {
+            font-size: 12px;
+            color: #7f8c8d;
+            margin-top: 5px;
+            padding-left: 15px;
+        }
+        
+        /* 性能优化相关样式 */
+        .performance-optimized {
+            /* 启用硬件加速 */
+            transform: translateZ(0);
+            backface-visibility: hidden;
+            will-change: transform, opacity;
+        }
+        
+        /* 预加载类 */
+        .preload {
+            position: absolute;
+            width: 0;
+            height: 0;
+            overflow: hidden;
+            left: -9999px;
+        }
+        
+        /* 调试模式下的交互边界 */
+        .interaction-boundary {
+            outline: 2px dashed rgba(231, 76, 60, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <!-- 背景层 -->
+    <div id="bg-layer"></div>
+    
+    <!-- 关于弹窗 -->
+    <div id="aboutModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">关于</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="markdownContent" class="markdown-content"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 设置弹窗 -->
+    <div id="settingsModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">设置</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-group">
+                    <div class="settings-group-title">音频设置</div>
+                    <div class="settings-option">
+                        <span class="option-label">静音</span>
+                        <label class="option-toggle">
+                            <input type="checkbox" id="muteToggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="settings-group">
+                    <div class="settings-group-title">视觉效果</div>
+                    <div class="settings-option">
+                        <span class="option-label">禁用毛玻璃效果</span>
+                        <label class="option-toggle">
+                            <input type="checkbox" id="disableFrostedGlass">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-option">
+                        <span class="option-label">禁用背景模糊</span>
+                        <label class="option-toggle">
+                            <input type="checkbox" id="disableBlur">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-option">
+                        <span class="option-label">禁用遮罩效果</span>
+                        <label class="option-toggle">
+                            <input type="checkbox" id="disableOverlay">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-option">
+                        <span class="option-label">禁用阴影效果</span>
+                        <label class="option-toggle">
+                            <input type="checkbox" id="disableShadows">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-option">
+                        <span class="option-label">禁用过渡动画</span>
+                        <label class="option-toggle">
+                            <input type="checkbox" id="disableAnimations">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="settings-group">
+                    <div class="settings-group-title">性能优化</div>
+                    <div class="settings-option">
+                        <span class="option-label">启用硬件加速</span>
+                        <label class="option-toggle">
+                            <input type="checkbox" id="hardwareAcceleration" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-option">
+                        <span class="option-label">预加载资源</span>
+                        <label class="option-toggle">
+                            <input type="checkbox" id="preloadResources" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-description">
+                        启用这些选项可以提升游戏运行性能
+                    </div>
+                </div>
+                
+                <div class="settings-group">
+                    <div class="settings-group-title">开发工具</div>
+                    <div class="settings-option">
+                        <span class="option-label">显示元素交互边界</span>
+                        <label class="option-toggle">
+                            <input type="checkbox" id="showInteractionBoundaries">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-description">
+                        此选项将为所有可交互元素添加轮廓，便于调试UI布局
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 第一屏：词库选择界面 -->
+    <div id="screen1" class="screen">
+        <div class="top-buttons">
+            <button id="aboutBtn" class="top-btn">关于</button>
+            <button id="settingsBtn" class="top-btn">设置</button>
+        </div>
+        
+        <h1 class="title">英语传笑之猜(c)猜(c)吧(b)</h1>
+        
+        <div class="file-select-area">
+            <div class="file-input-group">
+                <button id="fileSelectBtn" class="file-input-btn">选择词库</button>
+                <div id="fileNameDisplay" class="file-name-display">（点击左侧按钮加载配置）</div>
+            </div>
+            <button id="startBtn" class="start-btn">开始游戏</button>
+        </div>
+        
+        <!-- 音乐提示 -->
+        <div id="musicHint" class="music-hint">点击页面任意位置启用背景音乐</div>
+    </div>
+    
+    <!-- 第二屏：加载界面 -->
+    <div id="loadingScreen" class="screen">
+        <div id="loadingText">LOADING...</div>
+        <div id="configName"></div>
+    </div>
+    
+    <!-- 第三屏：游戏界面 -->
+    <div id="gameScreen" class="screen">
+        <div id="accuracyBox" class="status-box">正确率: 0%</div>
+        <div id="statsBox" class="status-box">错误:0/正确:0/总数:0</div>
+        
+        <div class="game-content">
+            <div id="wordHint" class="word-hint">苹果 .n</div>
+            <div id="blanksArea" class="blanks-area">
+                <!-- 横线区域由JS动态生成 -->
+            </div>
+            <div id="bubblesArea" class="bubbles-area">
+                <!-- 字母泡泡由JS动态生成 -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- 第四屏：结束界面 -->
+    <div id="resultScreen" class="screen">
+        <div class="result-content">
+            <div class="result-title">Well done!</div>
+            <div class="result-stat">正确率: <span id="finalAccuracy" class="result-value">0%</span></div>
+            <div class="result-stat">用时: <span id="totalTime" class="result-value">0</span>秒</div>
+            <div class="result-stat">得分均速: <span id="averageSpeed" class="result-value">0</span>秒</div>
+            <button id="restartBtn" class="restart-btn">重新开始</button>
+        </div>
+    </div>
+    
+    <!-- 隐藏的文件输入 -->
+    <input type="file" id="fileInput" accept=".json" hidden>
+    
+    <!-- 音频元素 -->
+    <audio id="bgMusic" src="bin/Interlude.mp3" preload="auto" loop></audio>
+    <audio id="tinkleAudio" src="bin/tinkle.mp3" preload="auto"></audio>
+    
+    <!-- 预加载资源 -->
+    <div class="preload">
+        <!-- 预加载背景图片 -->
+        
+    </div>
+
+    <script>
+        // 性能优化后的JavaScript代码
+        (function() {
+            'use strict';
+            
+            // 全局变量
+            let selectedFile = null;
+            let wordData = null;
+            let shuffledWordList = [];
+            let currentWordIndex = 0;
+            let correctCount = 0;
+            let wrongCount = 0;
+            let gameStartTime = 0;
+            let musicStarted = false;
+            let filledBlanks = {};
+            let bubbleElements = [];
+            let isHardwareAccelerationEnabled = true;
+            let isPreloadEnabled = true;
+            
+            // DOM元素缓存
+            const domCache = {
+                screen1: document.getElementById('screen1'),
+                loadingScreen: document.getElementById('loadingScreen'),
+                gameScreen: document.getElementById('gameScreen'),
+                resultScreen: document.getElementById('resultScreen'),
+                fileSelectBtn: document.getElementById('fileSelectBtn'),
+                fileNameDisplay: document.getElementById('fileNameDisplay'),
+                startBtn: document.getElementById('startBtn'),
+                fileInput: document.getElementById('fileInput'),
+                loadingText: document.getElementById('loadingText'),
+                configName: document.getElementById('configName'),
+                bgMusic: document.getElementById('bgMusic'),
+                tinkleAudio: document.getElementById('tinkleAudio'),
+                wordHint: document.getElementById('wordHint'),
+                blanksArea: document.getElementById('blanksArea'),
+                bubblesArea: document.getElementById('bubblesArea'),
+                accuracyBox: document.getElementById('accuracyBox'),
+                statsBox: document.getElementById('statsBox'),
+                finalAccuracy: document.getElementById('finalAccuracy'),
+                totalTime: document.getElementById('totalTime'),
+                averageSpeed: document.getElementById('averageSpeed'),
+                musicHint: document.getElementById('musicHint'),
+                aboutModal: document.getElementById('aboutModal'),
+                settingsModal: document.getElementById('settingsModal'),
+                aboutBtn: document.getElementById('aboutBtn'),
+                settingsBtn: document.getElementById('settingsBtn'),
+                markdownContent: document.getElementById('markdownContent'),
+                restartBtn: document.getElementById('restartBtn'),
+                muteToggle: document.getElementById('muteToggle'),
+                disableFrostedGlass: document.getElementById('disableFrostedGlass'),
+                disableBlur: document.getElementById('disableBlur'),
+                disableOverlay: document.getElementById('disableOverlay'),
+                disableShadows: document.getElementById('disableShadows'),
+                disableAnimations: document.getElementById('disableAnimations'),
+                showInteractionBoundaries: document.getElementById('showInteractionBoundaries'),
+                hardwareAcceleration: document.getElementById('hardwareAcceleration'),
+                preloadResources: document.getElementById('preloadResources')
+            };
+            
+            // 事件委托管理器
+            const eventManager = {
+                handlers: {},
+                
+                addDelegate: function(parent, event, selector, handler) {
+                    if (!this.handlers[event]) {
+                        this.handlers[event] = [];
+                        parent.addEventListener(event, this.handleEvent.bind(this));
+                    }
+                    
+                    this.handlers[event].push({
+                        selector: selector,
+                        handler: handler
+                    });
+                },
+                
+                handleEvent: function(event) {
+                    const eventType = event.type;
+                    const handlers = this.handlers[eventType] || [];
+                    
+                    for (const handlerInfo of handlers) {
+                        if (event.target.matches(handlerInfo.selector)) {
+                            handlerInfo.handler.call(event.target, event);
+                        }
+                    }
+                }
+            };
+            
+            // 初始化函数
+            function init() {
+                setupEventListeners();
+                preloadResources();
+                applyPerformanceOptimizations();
+                applyVisualSettings();
+            }
+            
+            // 设置事件监听器
+            function setupEventListeners() {
+                // 文件选择相关
+                domCache.fileSelectBtn.addEventListener('click', () => {
+                    domCache.fileInput.click();
+                });
+                
+                domCache.fileInput.addEventListener('change', handleFileSelect);
+                domCache.startBtn.addEventListener('click', startGame);
+                
+                // 弹窗相关
+                domCache.aboutBtn.addEventListener('click', () => showModal(domCache.aboutModal));
+                domCache.settingsBtn.addEventListener('click', () => showModal(domCache.settingsModal));
+                
+                // 弹窗关闭
+                document.querySelectorAll('.modal-close').forEach(button => {
+                    button.addEventListener('click', hideAllModals);
+                });
+                
+                document.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('modal-overlay')) {
+                        hideAllModals();
+                    }
+                });
+                
+                // 重新开始按钮
+                domCache.restartBtn.addEventListener('click', resetToSelectionScreen);
+                
+                // 音乐初始化
+                document.addEventListener('click', initMusic, { once: true });
+                
+                // 设置选项
+                domCache.muteToggle.addEventListener('change', function() {
+                    domCache.bgMusic.muted = this.checked;
+                    domCache.tinkleAudio.muted = this.checked;
+                });
+                
+                // 视觉效果设置
+                domCache.disableFrostedGlass.addEventListener('change', applyVisualSettings);
+                domCache.disableBlur.addEventListener('change', applyVisualSettings);
+                domCache.disableOverlay.addEventListener('change', applyVisualSettings);
+                domCache.disableShadows.addEventListener('change', applyVisualSettings);
+                domCache.disableAnimations.addEventListener('change', applyVisualSettings);
+                domCache.showInteractionBoundaries.addEventListener('change', applyVisualSettings);
+                
+                // 性能设置
+                domCache.hardwareAcceleration.addEventListener('change', function() {
+                    isHardwareAccelerationEnabled = this.checked;
+                    applyPerformanceOptimizations();
+                });
+                
+                domCache.preloadResources.addEventListener('change', function() {
+                    isPreloadEnabled = this.checked;
+                    if (this.checked) {
+                        preloadResources();
+                    }
+                });
+                
+                // 修复的事件委托 - 游戏区域交互
+                domCache.bubblesArea.addEventListener('click', handleBubbleClick);
+                domCache.blanksArea.addEventListener('click', handleBlankClick);
+            }
+            
+            // 应用视觉效果设置
+            function applyVisualSettings() {
+                // 伪毛玻璃
+                if (domCache.disableFrostedGlass.checked) {
+                    document.querySelectorAll('.file-select-area, .game-content, .result-content').forEach(el => {
+                        el.style.backdropFilter = 'none';
+                    });
+                } else {
+                    document.querySelectorAll('.file-select-area, .game-content, .result-content').forEach(el => {
+                        el.style.backdropFilter = 'blur(5px)';
+                    });
+                }
+                
+                // 背景高斯模糊
+                if (domCache.disableBlur.checked) {
+                    document.getElementById('bg-layer').style.filter = 'none';
+                } else {
+                    document.getElementById('bg-layer').style.filter = 'blur(var(--blur-intensity))';
+                }
+                
+                // 阴影遮罩
+                if (domCache.disableOverlay.checked) {
+                    document.querySelectorAll('.screen').forEach(el => {
+                        el.style.backgroundColor = 'transparent';
+                    });
+                } else {
+                    document.querySelectorAll('.screen').forEach(el => {
+                        el.style.backgroundColor = 'rgba(255, 255, 255, var(--overlay-opacity))';
+                    });
+                }
+                
+                // 阴影效果
+                if (domCache.disableShadows.checked) {
+                    document.querySelectorAll('.file-select-area, .game-content, .result-content, .bubble, .blank, .word-hint, .status-box').forEach(el => {
+                        el.style.boxShadow = 'none';
+                    });
+                } else {
+                    document.querySelectorAll('.file-select-area, .game-content, .result-content').forEach(el => {
+                        el.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.2)';
+                    });
+                    document.querySelectorAll('.bubble').forEach(el => {
+                        el.style.boxShadow = '0 5px 10px rgba(0, 0, 0, 0.15)';
+                    });
+                    document.querySelectorAll('.blank, .word-hint, .status-box').forEach(el => {
+                        el.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.1)';
+                    });
+                }
+                
+                // 过渡动画
+                if (domCache.disableAnimations.checked) {
+                    document.querySelectorAll('*').forEach(el => {
+                        el.style.transition = 'none';
+                    });
+                } else {
+                    document.body.style.transition = 'all var(--transition-duration) ease-in-out';
+                }
+                
+                // 交互边界显示
+                if (domCache.showInteractionBoundaries.checked) {
+                    document.querySelectorAll('.bubble, .blank, button').forEach(el => {
+                        el.classList.add('interaction-boundary');
+                    });
+                } else {
+                    document.querySelectorAll('.interaction-boundary').forEach(el => {
+                        el.classList.remove('interaction-boundary');
+                    });
+                }
+            }
+            
+            // 预加载
+            function preloadResources() {
+                if (!isPreloadEnabled) return;
+                
+                const bgImg = new Image();
+                bgImg.src = 'bin/bgpic.jpg';
+                
+                domCache.bgMusic.load();
+                domCache.tinkleAudio.load();
+            }
+            
+            // 应用性能优化
+            function applyPerformanceOptimizations() {
+                if (isHardwareAccelerationEnabled) {
+                    document.body.classList.add('performance-optimized');
+                    
+                    // 支持时强制使用硬件加速
+                    const animatedElements = document.querySelectorAll('.blank, .bubble, .screen, #bg-layer');
+                    animatedElements.forEach(el => {
+                        el.classList.add('performance-optimized');
+                    });
+                } else {
+                    document.body.classList.remove('performance-optimized');
+                    
+                    const animatedElements = document.querySelectorAll('.performance-optimized');
+                    animatedElements.forEach(el => {
+                        el.classList.remove('performance-optimized');
+                    });
+                }
+            }
+            
+            // 文件选择处理
+            function handleFileSelect(event) {
+                const file = event.target.files[0];
+                if (file && file.name.endsWith('.json')) {
+                    selectedFile = file;
+                    domCache.fileNameDisplay.textContent = file.name;
+                    domCache.startBtn.classList.add('active');
+                } else {
+                    domCache.fileNameDisplay.textContent = "请选择有效的JSON文件";
+                    domCache.startBtn.classList.remove('active');
+                }
+            }
+            
+            // 音乐初始化
+            function initMusic() {
+                if (!musicStarted) {
+                    try {
+                        domCache.bgMusic.volume = 0.5;
+                        domCache.bgMusic.play().then(() => {
+                            musicStarted = true;
+                            domCache.musicHint.style.display = 'none';
+                        }).catch(e => {
+                            console.log('背景音乐播放失败:', e);
+                            domCache.musicHint.textContent = '点击启用背景音乐 (浏览器阻止了自动播放)';
+                        });
+                    } catch (e) {
+                        console.log('背景音乐播放失败:', e);
+                        domCache.musicHint.textContent = '点击启用背景音乐 (浏览器阻止了自动播放)';
+                    }
+                }
+            }
+            
+            // 显示弹窗
+            function showModal(modal) {
+                if (modal === domCache.aboutModal) {
+                    // 使用文档1中更完善的Markdown转换函数
+                    const htmlContent = markdownToHtmlImproved(readmeContent);
+                    domCache.markdownContent.innerHTML = htmlContent;
+                }
+                
+                modal.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            }
+            
+            // 隐藏所有弹窗
+            function hideAllModals() {
+                domCache.aboutModal.classList.remove('active');
+                domCache.settingsModal.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+            
+            // 从文档1移植的更好的Markdown转换函数
+            function markdownToHtmlImproved(markdown) {
+                // 替换标题
+                markdown = markdown.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+                markdown = markdown.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+                markdown = markdown.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+                markdown = markdown.replace(/^#### (.*$)/gim, '<h4>$1</h4>');
+                markdown = markdown.replace(/^##### (.*$)/gim, '<h5>$1</h5>');
+                markdown = markdown.replace(/^###### (.*$)/gim, '<h6>$1</h6>');
+                
+                // 替换粗体
+                markdown = markdown.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>');
+                markdown = markdown.replace(/\_\_(.*?)\_\_/gim, '<strong>$1</strong>');
+                
+                // 替换斜体
+                markdown = markdown.replace(/\*(.*?)\*/gim, '<em>$1</em>');
+                markdown = markdown.replace(/\_(.*?)\_/gim, '<em>$1</em>');
+                
+                // 替换代码块
+                markdown = markdown.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+                markdown = markdown.replace(/`(.*?)`/g, '<code>$1</code>');
+                
+                // 替换引用
+                markdown = markdown.replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>');
+                
+                // 替换水平线
+                markdown = markdown.replace(/^\-\-\-$/gim, '<hr>');
+                
+                // 替换无序列表
+                markdown = markdown.replace(/^\s*\- (.*$)/gim, '<ul><li>$1</li></ul>');
+                markdown = markdown.replace(/^\s*\* (.*$)/gim, '<ul><li>$1</li></ul>');
+                
+                // 替换有序列表
+                markdown = markdown.replace(/^\s*\d+\. (.*$)/gim, '<ol><li>$1</li></ol>');
+                
+                // 修复嵌套列表
+                markdown = markdown.replace(/<\/ul>\s*<ul>/g, '');
+                markdown = markdown.replace(/<\/ol>\s*<ol>/g, '');
+                
+                // 替换链接
+                markdown = markdown.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
+                
+                // 替换图片
+                markdown = markdown.replace(/\!\[(.*?)\]\((.*?)\)/g, '');
+                
+                // 替换段落
+                markdown = markdown.replace(/\n\n/g, '</p><p>');
+                markdown = '<p>' + markdown + '</p>';
+                
+                // 替换换行符
+                markdown = markdown.replace(/\n/g, '<br>');
+                
+                return markdown;
+            }
+            
+            // 保留原有的简单Markdown转换函数作为备选
+            function markdownToHtml(markdown) {
+                // 先转义HTML特殊字符
+                markdown = escapeHtml(markdown);
+                
+                // 处理标题
+                markdown = markdown.replace(/^# (.*$)/gm, '<h1>$1</h1>')
+                    .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+                    .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+                    .replace(/^#### (.*$)/gm, '<h4>$1</h4>')
+                    .replace(/^##### (.*$)/gm, '<h5>$1</h5>')
+                    .replace(/^###### (.*$)/gm, '<h6>$1</h6>');
+                
+                // 处理代码块
+                markdown = markdown.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+                
+                // 处理行内代码
+                markdown = markdown.replace(/`([^`]+)`/g, '<code>$1</code>');
+                
+                // 处理粗体
+                markdown = markdown.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/__(.*?)__/g, '<strong>$1</strong>');
+                
+                // 处理斜体
+                markdown = markdown.replace(/\*(.*?)\*/g, '<em>$1</em>')
+                    .replace(/_(.*?)_/g, '<em>$1</em>');
+                
+                // 处理删除线
+                markdown = markdown.replace(/~~(.*?)~~/g, '<del>$1</del>');
+                
+                // 处理链接
+                markdown = markdown.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2">$1</a>');
+                
+                // 处理图片
+                markdown = markdown.replace(/!\[(.*?)\]\((.*?)\)/g, '');
+                
+                // 处理无序列表
+                markdown = markdown.replace(/^\s*\*\s(.*$)/gm, '<li>$1</li>')
+                    .replace(/^\s*-\s(.*$)/gm, '<li>$1</li>')
+                    .replace(/^\s*\+\s(.*$)/gm, '<li>$1</li>');
+                
+                // 处理有序列表
+                markdown = markdown.replace(/^\s*\d+\.\s(.*$)/gm, '<li>$1</li>');
+                
+                // 处理换行符
+                markdown = markdown.replace(/\n\n/g, '</p><p>');
+                
+                // 处理水平线
+                markdown = markdown.replace(/^\s*---\s*$/gm, '<hr>');
+                
+                // 处理引用
+                markdown = markdown.replace(/^\>\s(.*$)/gm, '<blockquote>$1</blockquote>');
+                
+                // 处理表格
+                markdown = markdown.replace(/^\|(.+)\|$/gm, function(match, p1) {
+                    const cells = p1.split('|').map(cell => cell.trim());
+                    return '<tr>' + cells.map(cell => `<td>${cell}</td>`).join('') + '</tr>';
+                });
+                
+                return '<p>' + markdown + '</p>';
+            }
+            
+            // HTML转义
+            function escapeHtml(unsafe) {
+                return unsafe
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+            }
+            
+            // 开始游戏
+            function startGame() {
+                if (!selectedFile) return;
+                
+                if (musicStarted) {
+                    domCache.bgMusic.pause();
+                }
+                
+                // 淡出第一屏
+                domCache.screen1.style.opacity = '0';
+                domCache.screen1.style.pointerEvents = 'none';
+                
+                setTimeout(() => {
+                    domCache.loadingScreen.style.opacity = '1';
+                    domCache.loadingScreen.style.pointerEvents = 'auto';
+                    
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        try {
+                            wordData = JSON.parse(e.target.result);
+                            shuffleWordList();
+                            startLoadingAnimation();
+                        } catch (error) {
+                            console.error('解析JSON失败:', error);
+                            domCache.fileNameDisplay.textContent = "词库解析错误";
+                            resetToSelectionScreen();
+                        }
+                    };
+                    reader.readAsText(selectedFile);
+                }, 1500);
+            }
+            
+            // 打乱词序
+            function shuffleWordList() {
+                if (!wordData || !wordData.data) return;
+                
+                const wordKeys = Object.keys(wordData.data);
+                
+                // 优化洗牌算法
+                for (let i = wordKeys.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [wordKeys[i], wordKeys[j]] = [wordKeys[j], wordKeys[i]];
+                }
+                
+                shuffledWordList = wordKeys;
+            }
+            
+            // 开始加载动画
+            function startLoadingAnimation() {
+                if (wordData && wordData.about && wordData.about.F_name) {
+                    domCache.configName.textContent = wordData.about.F_name;
+                }
+                
+                setTimeout(() => {
+                    domCache.loadingText.style.fontSize = '24px';
+                    domCache.loadingText.style.top = '10px';
+                    domCache.loadingText.style.left = '10px';
+                    domCache.loadingText.style.transform = 'translate(0, 0)';
+                }, 2000);
+                
+                setTimeout(() => {
+                    domCache.configName.style.opacity = '1';
+                }, 3000);
+                
+                setTimeout(() => {
+                    domCache.loadingScreen.style.opacity = '0';
+                    
+                    setTimeout(() => {
+                        domCache.gameScreen.style.opacity = '1';
+                        domCache.gameScreen.style.pointerEvents = 'auto';
+                        startGameSession();
+                    }, 1350);
+                }, 5000);
+            }
+            
+            // 开始游戏会话
+            function startGameSession() {
+                currentWordIndex = 0;
+                correctCount = 0;
+                wrongCount = 0;
+                gameStartTime = Date.now();
+                filledBlanks = {};
+                bubbleElements = [];
+                
+                loadNextWord();
+            }
+            
+            // 加载下一个单词
+            function loadNextWord() {
+                if (currentWordIndex >= shuffledWordList.length) {
+                    endGame();
+                    return;
+                }
+                
+                const wordKey = shuffledWordList[currentWordIndex];
+                const wordInfo = wordData.data[wordKey];
+                
+                domCache.wordHint.textContent = wordInfo.C || '未知单词';
+                createBlanksArea(wordInfo.E);
+                createBubblesArea(wordInfo.E);
+                updateStatusBoxes();
+            }
+            
+            // 创建横线区域
+            function createBlanksArea(word) {
+                // 使用DocumentFragment减少重排
+                const fragment = document.createDocumentFragment();
+                
+                for (let i = 0; i < word.length; i++) {
+                    const blank = document.createElement('div');
+                    blank.className = 'blank';
+                    blank.textContent = '_';
+                    blank.dataset.index = i;
+                    blank.dataset.original = '_';
+                    blank.dataset.filledBy = ''; // 添加这个属性
+                    fragment.appendChild(blank);
+                }
+                
+                domCache.blanksArea.innerHTML = '';
+                domCache.blanksArea.appendChild(fragment);
+            }
+            
+            // 创建字母泡泡
+            function createBubblesArea(word) {
+                const fragment = document.createDocumentFragment();
+                bubbleElements = [];
+                const letters = word.split('');
+                
+                // 打乱字母顺序，确保与原顺序不同
+                let shuffledLetters = [...letters];
+                let isSameOrder = true;
+                
+                // 最多10次打乱
+                for (let attempt = 0; attempt < 10; attempt++) {
+                    // 打乱字母顺序
+                    for (let i = shuffledLetters.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [shuffledLetters[i], shuffledLetters[j]] = [shuffledLetters[j], shuffledLetters[i]];
+                    }
+                    
+                    // 检查是否与原顺序相同
+                    isSameOrder = true;
+                    for (let i = 0; i < letters.length; i++) {
+                        if (letters[i].toLowerCase() !== shuffledLetters[i].toLowerCase()) {
+                            isSameOrder = false;
+                            break;
+                        }
+                    }
+                    
+                    if (!isSameOrder) break;
+                    
+                    // 如果相同，重新打乱
+                    if (attempt < 9) {
+                        shuffledLetters = [...letters];
+                    }
+                }
+                
+                // 创建泡泡元素
+                shuffledLetters.forEach((letter, index) => {
+                    const bubble = document.createElement('div');
+                    bubble.className = 'bubble';
+                    bubble.textContent = letter;
+                    bubble.dataset.letter = letter;
+                    bubble.dataset.index = index;
+                    bubble.dataset.visible = 'true';
+                    
+                    const hue = 200 + (index * 40 / shuffledLetters.length);
+                    bubble.style.backgroundColor = `hsl(${hue}, 70%, 60%)`;
+                    
+                    fragment.appendChild(bubble);
+                    bubbleElements.push(bubble);
+                });
+                
+                domCache.bubblesArea.innerHTML = '';
+                domCache.bubblesArea.appendChild(fragment);
+            }
+            
+            // 修复的泡泡点击处理函数
+            function handleBubbleClick(event) {
+                const bubble = event.target;
+                if (!bubble.classList.contains('bubble')) return;
+                
+                const letter = bubble.dataset.letter;
+                const bubbleIndex = bubble.dataset.index;
+                
+                const blanks = document.querySelectorAll('.blank');
+                for (const blank of blanks) {
+                    if (blank.textContent === '_') {
+                        // 填充横线
+                        blank.textContent = letter;
+                        blank.dataset.filledBy = bubbleIndex;
+                        
+                        // 记录填充信息
+                        filledBlanks[blank.dataset.index] = {
+                            bubbleIndex: bubbleIndex,
+                            letter: letter
+                        };
+                        
+                        // 隐藏泡泡
+                        bubble.style.visibility = 'hidden';
+                        bubble.dataset.visible = 'false';
+                        
+                        checkWordCompletion();
+                        return;
+                    }
+                }
+            }
+            
+            // 修复的撤销功能
+            function handleBlankClick(event) {
+                const blank = event.target;
+                if (!blank.classList.contains('blank')) return;
+                
+                // 如果横线已经被填充（不是下划线）
+                if (blank.textContent !== '_') {
+                    const blankIndex = blank.dataset.index;
+                    
+                    // 检查这个位置是否在 filledBlanks 中有记录
+                    if (filledBlanks[blankIndex]) {
+                        const bubbleIndex = filledBlanks[blankIndex].bubbleIndex;
+                        
+                        // 找到对应的泡泡元素
+                        const bubble = document.querySelector(`.bubble[data-index="${bubbleIndex}"]`);
+                        
+                        if (bubble && bubble.dataset.visible === 'false') {
+                            // 恢复泡泡可见性
+                            bubble.style.visibility = 'visible';
+                            bubble.dataset.visible = 'true';
+                            
+                            // 恢复横线为下划线
+                            blank.textContent = '_';
+                            blank.dataset.filledBy = '';
+                            
+                            // 从记录中删除
+                            delete filledBlanks[blankIndex];
+                        }
+                    }
+                }
+            }
+            
+            // 检查单词是否完成
+            function checkWordCompletion() {
+                const blanks = document.querySelectorAll('.blank');
+                let completed = true;
+                let word = '';
+                
+                for (const blank of blanks) {
+                    if (blank.textContent === '_') {
+                        completed = false;
+                        break;
+                    }
+                    word += blank.textContent;
+                }
+                
+                if (completed) {
+                    const wordKey = shuffledWordList[currentWordIndex];
+                    const correctWord = wordData.data[wordKey].E;
+                    
+                    if (word.toLowerCase() === correctWord.toLowerCase()) {
+                        correctCount++;
+                    } else {
+                        wrongCount++;
+                    }
+                    
+                    updateStatusBoxes();
+                    currentWordIndex++;
+                    setTimeout(loadNextWord, 500);
+                }
+            }
+            
+            // 更新状态框
+            function updateStatusBoxes() {
+                const total = correctCount + wrongCount;
+                const accuracy = total > 0 ? Math.round((correctCount / total) * 100) : 0;
+                
+                domCache.accuracyBox.textContent = `正确率: ${accuracy}%`;
+                domCache.statsBox.textContent = `错误:${wrongCount}/正确:${correctCount}/总数:${shuffledWordList.length}`;
+            }
+            
+            // 结束游戏
+            function endGame() {
+                domCache.tinkleAudio.play();
+                
+                domCache.gameScreen.style.opacity = '0';
+                domCache.gameScreen.style.pointerEvents = 'none';
+                
+                const totalTimeMs = Date.now() - gameStartTime;
+                const totalTimeSec = Math.round(totalTimeMs / 1000);
+                
+                const total = correctCount + wrongCount;
+                const accuracy = total > 0 ? Math.round((correctCount / total) * 100) : 0;
+                const average = total > 0 ? (totalTimeSec / total).toFixed(1) : 0;
+                
+                domCache.finalAccuracy.textContent = `${accuracy}%`;
+                domCache.totalTime.textContent = totalTimeSec;
+                domCache.averageSpeed.textContent = average;
+                
+                domCache.resultScreen.style.opacity = '1';
+                domCache.resultScreen.style.pointerEvents = 'auto';
+            }
+            
+            // 重置到选择界面
+            function resetToSelectionScreen() {
+                domCache.screen1.style.opacity = '1';
+                domCache.screen1.style.pointerEvents = 'auto';
+                
+                domCache.loadingScreen.style.opacity = '0';
+                domCache.loadingScreen.style.pointerEvents = 'none';
+                
+                domCache.gameScreen.style.opacity = '0';
+                domCache.gameScreen.style.pointerEvents = 'none';
+                
+                domCache.resultScreen.style.opacity = '0';
+                domCache.resultScreen.style.pointerEvents = 'none';
+                
+                domCache.loadingText.style.fontSize = '48px';
+                domCache.loadingText.style.top = '50%';
+                domCache.loadingText.style.left = '50%';
+                domCache.loadingText.style.transform = 'translate(-50%, -50%)';
+                domCache.configName.style.opacity = '0';
+                
+                if (musicStarted) {
+                    domCache.bgMusic.currentTime = 0;
+                    domCache.bgMusic.play();
+                }
+            }
+            
+            // README内容 - 与文档1完全相同的Markdown内容
+            const readmeContent = `# 猜单词字母排序游戏 - README
+
+## 项目概述
+
+猜单词字母排序游戏是一款完全离线的英语学习游戏，旨在帮助玩家提高英语单词拼写能力。游戏通过展示中文释义和词性提示，要求玩家将打乱的字母按正确顺序排列，形成目标单词。
+
+## 核心玩法
+
+1. **词库选择**：玩家从本地选择词库文件（JSON格式）
+2. **单词挑战**：
+   - 显示中文释义和词性（如"苹果 .n"）
+   - 下方显示对应单词长度的横线
+   - 横线下是打乱顺序的单个字母泡泡
+3. **交互方式**：
+   - 点击字母泡泡将其填充到横线上
+   - 点击已填充字母可撤销操作
+4. **进度追踪**：
+   - 实时显示正确率
+   - 记录错误/正确/总数统计
+
+## 技术特点
+
+- **完全离线**：所有资源本地加载，无需网络连接
+- **响应式设计**：适配桌面和移动设备
+- **原生HTML5实现**：使用纯HTML/CSS/JavaScript开发
+- **高性能动画**：流畅的过渡效果和交互反馈
+- **自定义词库**：支持用户创建自己的单词库
+
+## 文件结构
+
+\`\`\`
+项目根目录/
+├── run.html                # 主入口文件
+├── README.md               # 项目说明文档
+├── bin/                    # 资源文件目录
+│   ├── Interlude.mp3       # 加载背景音乐
+│   └── tinkle.mp3          # 完成音效
+├── data/                   # 词库目录
+│   ├── unit1.json          # 示例词库1
+│   └── unit2.json          # 示例词库2
+└── fonts/                  # 字体文件目录
+    └── MiSans/             # MiSans字体
+        ├── MiSans-Regular.ttf
+        └── ...             # 其他字体格式
+\`\`\`
+
+## 词库格式规范
+
+词库使用JSON格式，结构如下：
+
+\`\`\`json
+{
+  "about": {
+    "F_name": "英语八下第一单元单词人教版",
+    "S_name": "八下第一单元"
+  },
+  "data": {
+    "word1": {
+      "C": "苹果 .n",
+      "E": "apple"
+    },
+    "word2": {
+      "C": "跑 .v",
+      "E": "run"
+    }
+  }
+}
+\`\`\`
+
+## 游戏流程
+
+1. **选择词库**：用户选择本地词库文件
+2. **加载动画**：
+   - 播放5秒间奏音频
+   - 显示加载动画和词库名称
+3. **游戏界面**：
+   - 左上角显示正确率
+   - 右上角显示答题统计
+   - 中央显示单词提示和字母泡泡
+4. **结束界面**：
+   - 显示最终正确率
+   - 显示总用时
+   - 显示得分均速
+
+## 开发指南
+
+### 运行项目
+
+1. 完整解压ZIP文件
+2. 打开\`run.html\`文件
+3. 选择词库文件开始游戏(注意应使用Chrome86+, Firefox 51+, Safari, Edge-Chromium，IE10+等现代浏览器，本项目已实现对于IE10+的初步支持，IE6~9需自测。因历史原因，对于2008年前的所有浏览器，不提供维护与支持):
+
+### 自定义词库
+
+1. 创建JSON文件，遵循上述词库格式
+2. 将文件放入\`/data/\`目录
+3. 在游戏中选择新词库
+
+### 修改样式
+
+CSS样式集中在\`run.html\`文件中，可修改：
+- 颜色方案
+- 字体大小
+- 动画时长
+- 布局尺寸
+
+## 系统要求
+
+- 现代浏览器（Chrome, Firefox, Safari, Edge等）
+- 支持HTML5和CSS3
+- JavaScript启用
+
+## Change log:
+<br/>
+<br/>
+**ver.20251018.preview.user_release.01-f(v0.1.2 r01f)(fixed)(latest):**
+- 修复撤销功能,使用事件监听器而非DOM实现撤销泡泡追踪;
+- 增大点击事件判定范围;
+- 优化横屏下的泡泡排版;
+- 修复了一堆BUG的同时,可能在无人发现的角落又出现了新的BUG?
+<br/>
+**ver.20251018.preview.user_release.01(v0.1.2 r01)：**
+- 使用CSS变量统一管理动画参数;
+- 启用硬件加速（transform: translateZ(0)）;
+- 优化CSS选择器性能;
+- 减少重绘和重排;
+<br/>
+**ver.20251018.beta1.debug_build:**
+- 性能优化；
+- 尝试在Chromium内核的浏览器上启用硬件加速；
+- 完成移动端竖屏界面支持；
+- 修复超大词库加载时的内存溢出；
+- 调整部分设置选项；
+- 重构高斯模糊的实现方式并适当下调模糊程度以增强可视性；
+- 修复设置-debug选项-"显示布局边界"启用后阴影遮罩的闪烁问题;
+<br/>
+**ver.20251017.alpha2:**
+- 修复高分辨率下概率字母泡泡重叠问题；
+- 完成对于IE内核的特殊支持（自适应切换时间戳计时而非JavaScript高精度计时）；
+- UI重构；
+<br/>
+**ver.20251017.alpha1:**
+- 初版；
+- 核心功能完整实现；
+
+## 许可证
+
+本项目采用 MIT LICENSE`;
+
+            // 初始化
+            init();
+        })();
+    </script>
+</body>
+</html>
